@@ -192,6 +192,22 @@ static void TryShutdown() {
     MicroProfileShutdown();
 }
 
+#ifdef RG_ROTATE_PGO_GENERATE
+// RG Rotate profiling build: Android never lets a process exit normally, so the LLVM profile
+// runtime's atexit hook never fires. Dump (and reset) the counters ourselves whenever emulation
+// pauses or stops. The %m in the default file name merges repeated dumps into one file.
+extern "C" int __llvm_profile_write_file(void);
+extern "C" void __llvm_profile_reset_counters(void);
+
+static void DumpPgoProfile(const char* reason) {
+    const int result = __llvm_profile_write_file();
+    __llvm_profile_reset_counters();
+    LOG_INFO(Frontend, "PGO profile dump ({}): {}", reason, result == 0 ? "ok" : "FAILED");
+}
+#else
+static void DumpPgoProfile(const char*) {}
+#endif
+
 static bool CheckMicPermission() {
     return IDCache::GetEnvForThread()->CallStaticBooleanMethod(IDCache::GetNativeLibraryClass(),
                                                                IDCache::GetRequestMicPermission());
@@ -860,6 +876,7 @@ void Java_org_citra_citra_1emu_NativeLibrary_unPauseEmulation([[maybe_unused]] J
 
 void Java_org_citra_citra_1emu_NativeLibrary_pauseEmulation([[maybe_unused]] JNIEnv* env,
                                                             [[maybe_unused]] jobject obj) {
+    DumpPgoProfile("emulation paused");
     pause_emulation = true;
     auto* handler = InputManager::NDKMotionHandler();
     if (handler) {
@@ -1066,6 +1083,7 @@ void Java_org_citra_citra_1emu_NativeLibrary_run__Ljava_lang_String_2(JNIEnv* en
     }
 
     const Core::System::ResultStatus result{RunCitra(path)};
+    DumpPgoProfile("emulation stopped");
     if (result != Core::System::ResultStatus::Success) {
         env->CallStaticVoidMethod(IDCache::GetNativeLibraryClass(),
                                   IDCache::GetExitEmulationActivity(), static_cast<int>(result));

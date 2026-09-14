@@ -74,6 +74,19 @@ cache, accurate multiplication off, frame limiter on) is already the best choice
   (enables LSE atomics and CRC instructions).
 - Vulkan validation layers are no longer downloaded or packaged (debug-only, ~10 MB).
 
+## Profile-guided optimization
+
+The build supports PGO for the games you actually play:
+
+1. `./gradlew assembleRgRotateRelease -Ppgo=generate` builds **Azahar RG Rotate (Profiling)**,
+   a separate, slower app (package `org.azahar_emu.azahar.rgrotate.profile`) whose native code
+   is instrumented. Every time emulation pauses or stops it writes counters to
+   `Android/data/org.azahar_emu.azahar.rgrotate.profile/files/pgo/`.
+2. Play the target games for a while, then pull the `.profraw` files and merge them as described
+   in [pgo/README.md](pgo/README.md).
+3. `./gradlew assembleRgRotateRelease -Ppgo=use` builds the normal app with the compiler laying
+   out and inlining code according to that profile.
+
 ## After installing
 
 The package id differs from the official app, so pick your Azahar user folder again on first run.

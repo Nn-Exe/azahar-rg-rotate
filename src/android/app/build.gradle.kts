@@ -22,6 +22,24 @@ val autoVersion = (((System.currentTimeMillis() / 1000) - 1451606400) / 10).toIn
 // RG Rotate build: the Unisoc T618 is arm64 only, so skip the x86_64 slice entirely.
 val abiFilter = listOf("arm64-v8a")
 
+// RG Rotate build: profile-guided optimization.
+//   ./gradlew assembleRgRotateRelease -Ppgo=generate   -> instrumented "Profiling" app that writes
+//                                                         .profraw files while you play
+//   ./gradlew assembleRgRotateRelease -Ppgo=use        -> optimized with pgo/rgrotate.profdata
+val pgoMode = (project.findProperty("pgo") as String?) ?: "off"
+val pgoPackageId = "org.azahar_emu.azahar.rgrotate.profile"
+val pgoProfileDir = "/storage/emulated/0/Android/data/$pgoPackageId/files/pgo"
+val pgoProfileData = (project.findProperty("pgoProfile") as String?)
+    ?: File(rootDir, "../../pgo/rgrotate.profdata").canonicalPath
+val rgRotateBaseFlags = "-march=armv8.2-a+crc -mtune=cortex-a75"
+val rgRotateCompileFlags = when (pgoMode) {
+    "generate" -> "$rgRotateBaseFlags -fprofile-generate=$pgoProfileDir -DRG_ROTATE_PGO_GENERATE=1"
+    "use" -> "$rgRotateBaseFlags -fprofile-use=$pgoProfileData " +
+        "-Wno-profile-instr-unprofiled -Wno-profile-instr-out-of-date -Wno-backend-plugin"
+    else -> rgRotateBaseFlags
+}
+val rgRotateLinkerFlags = if (pgoMode == "generate") "-fprofile-generate=$pgoProfileDir" else ""
+
 val downloadedJniLibsPath = "${layout.buildDirectory.get().asFile.path}/downloadedJniLibs"
 
 android {
@@ -86,8 +104,9 @@ android {
                     // RG Rotate build: Unisoc T618 = 2x Cortex-A75 + 6x Cortex-A55 (ARMv8.2-A).
                     // Targeting that baseline lets the compiler emit LSE atomics and CRC
                     // instructions and schedule for the A75 big cores.
-                    "-DCMAKE_C_FLAGS=-march=armv8.2-a+crc -mtune=cortex-a75",
-                    "-DCMAKE_CXX_FLAGS=-march=armv8.2-a+crc -mtune=cortex-a75"
+                    "-DCMAKE_C_FLAGS=$rgRotateCompileFlags",
+                    "-DCMAKE_CXX_FLAGS=$rgRotateCompileFlags",
+                    "-DCMAKE_SHARED_LINKER_FLAGS=$rgRotateLinkerFlags"
                 )
             }
         }
@@ -181,18 +200,29 @@ android {
             isDefault = true
             dimension = "version"
             versionNameSuffix = "-vanilla"
+            buildConfigField("boolean", "PGO_GENERATE", "false")
         }
         // RG Rotate build: separate package so it installs next to (and never signature-conflicts
         // with) the official Azahar APK.
         register("rgRotate") {
             dimension = "version"
-            versionNameSuffix = "-rgrotate"
-            applicationId = "org.azahar_emu.azahar.rgrotate"
+            if (pgoMode == "generate") {
+                // Separate package so the slow instrumented build installs next to the real one.
+                versionNameSuffix = "-rgrotate-pgo"
+                applicationId = pgoPackageId
+                resValue("string", "app_name", "Azahar RG Rotate (Profiling)")
+            } else {
+                versionNameSuffix = "-rgrotate"
+                applicationId = "org.azahar_emu.azahar.rgrotate"
+                resValue("string", "app_name", "Azahar RG Rotate")
+            }
+            buildConfigField("boolean", "PGO_GENERATE", (pgoMode == "generate").toString())
         }
         register("googlePlay") {
             dimension = "version"
             versionNameSuffix = "-googleplay"
             applicationId = "io.github.lime3ds.android"
+            buildConfigField("boolean", "PGO_GENERATE", "false")
         }
     }
 

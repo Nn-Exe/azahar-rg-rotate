@@ -50,6 +50,11 @@ class CitraApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         application = this
+        if (BuildConfig.PGO_GENERATE) {
+            // Make sure Android/data/<pkg>/files/pgo exists so the LLVM profile runtime can
+            // write there from native code (the system creates this directory on first request).
+            getExternalFilesDir("pgo")
+        }
         documentsTree = DocumentsTree()
         if (PermissionsHandler.hasWriteAccess(applicationContext)) {
             DirectoryInitialization.start()
