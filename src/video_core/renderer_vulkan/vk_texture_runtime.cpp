@@ -158,7 +158,11 @@ vk::ImageSubresourceRange MakeSubresourceRange(vk::ImageAspectFlags aspect, u32 
     };
 }
 
-constexpr u64 UPLOAD_BUFFER_SIZE = 512_MiB;
+// RG Rotate build: upstream reserves 512 MiB here. On Mali the buffer is host-visible system RAM
+// and the ring eventually touches every page, so on a 3 GB device it alone could hold a sixth of
+// all memory. 128 MiB still fits any single upload at the resolutions this GPU can drive (an 18x
+// 400x240 surface is ~124 MiB; this build runs at 1x-2x).
+constexpr u64 UPLOAD_BUFFER_SIZE = 128_MiB;
 constexpr u64 DOWNLOAD_BUFFER_SIZE = 16_MiB;
 
 } // Anonymous namespace
