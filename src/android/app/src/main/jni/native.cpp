@@ -221,13 +221,15 @@ static Core::System::ResultStatus RunCitra(const std::string& filepath) {
 
     MicroProfileOnThreadCreate("EmuThread");
 
-    // RG Rotate build: the CPU JIT runs on this thread. Keep it on the Cortex-A75 big cores and
-    // ahead of the UI in the run queue instead of letting Android's scheduler park it on an A55.
+    // RG Rotate build: raise this thread's priority so the UI and background apps cannot push the
+    // emulation loop out of the run queue. Deliberately NOT pinned to the big cores: the emulated
+    // CPU cores, the Vulkan threads and the Mali driver's own worker threads all inherit this
+    // thread's affinity mask, and crowding ~16 busy threads onto the T618's two Cortex-A75 cores
+    // measured about 3x slower than letting the scheduler use all eight.
     {
-        const int pinned = Common::PinCurrentThreadToPerformanceCores();
         const bool boosted = Common::RaiseCurrentThreadPriority();
-        LOG_INFO(Frontend, "EmuThread scheduling: {} performance core(s), priority boost {}",
-                 pinned, boosted ? "applied" : "unavailable");
+        LOG_INFO(Frontend, "EmuThread priority boost {}",
+                 boosted ? "applied" : "unavailable");
     }
 
     if (filepath.empty()) {

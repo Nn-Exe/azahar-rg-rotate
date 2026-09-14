@@ -38,19 +38,35 @@ Save states are now streamed through zstd directly to and from the file with a c
 buffers. Compression level 1 keeps the pause short on the T618. The file format is unchanged
 (256-byte CST header followed by one zstd frame).
 
-### Big-core scheduling (`src/common/thread.cpp`, `jni/native.cpp`, `vk_scheduler.cpp`)
+### Thread priority (`src/common/thread.cpp`, `jni/native.cpp`, `vk_scheduler.cpp`)
 
-The T618 is big.LITTLE (2x A75 + 6x A55) and Android's scheduler happily leaves heavy threads on
-the little cores. Two new helpers, `PinCurrentThreadToPerformanceCores()` (reads
-`/sys/devices/system/cpu/cpuN/cpu_capacity`, falls back to `cpuinfo_max_freq`, and pins to the
-highest-capacity cluster) and `RaiseCurrentThreadPriority()` (nice -8, Android's
-`THREAD_PRIORITY_URGENT_DISPLAY`), are applied to:
+`RaiseCurrentThreadPriority()` sets nice -8 (Android's `THREAD_PRIORITY_URGENT_DISPLAY`) on the
+emulation thread and the Vulkan worker thread. Logged at startup as `EmuThread priority boost
+applied`.
 
-- the emulation thread (CPU JIT, HLE, audio mixing), and
-- the Vulkan worker thread (command recording and submission).
+Big-core pinning was tried and removed: threads inherit their creator's affinity, so pinning the
+emulation thread also pinned the 4 emulated-CPU threads, the Vulkan present threads and about a
+dozen Mali driver threads to cores 6 and 7, leaving the six A55 cores idle.
 
-Both are no-ops on homogeneous CPUs. The result is logged at startup as
-`EmuThread scheduling: 2 performance core(s), priority boost applied`.
+### Smaller Vulkan upload buffer (`vk_texture_runtime.cpp`)
+
+The texture upload staging ring is 128 MiB instead of 512 MiB. On Mali it is host-visible system
+RAM, which matters on a 3 GB device.
+
+### Measured performance
+
+Deterministic benchmark on the device (Pokemon Ultra Sun booted with no input, frame limiter off,
+identical settings in both apps, frame times compared at matching frame indices), second half of
+~5,600 frames:
+
+| Build | Run 1 | Run 2 |
+| --- | --- | --- |
+| Official Azahar 2126.1.1 | 21.8 ms | 23.4 ms |
+| This build | 23.7 ms | 23.7 ms |
+
+The two are at parity within run-to-run noise. This build's value is the save-state fix, the
+lower memory footprint and the device defaults, not raw speed. The benchmark tooling is in
+[tools/rgrotate-bench](tools/rgrotate-bench).
 
 ### Defaults tuned for the device
 

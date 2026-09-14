@@ -31,8 +31,7 @@ The RG Rotate is a weak, low-memory handheld:
 | OS | Android 12 |
 
 The official Android build assumes more RAM and a phone-shaped screen. On this device, save
-states crashed the emulator every time, and nothing kept the heavy emulation threads on the two
-fast cores. This build fixes those and sets defaults that fit the hardware. Nothing here is a
+states crashed the emulator every time. This build fixes those and sets defaults that fit the hardware. Nothing here is a
 general improvement to Azahar; it is specific to this device.
 
 ## Download and install
@@ -63,11 +62,13 @@ The root-cause analysis was shared with the Azahar team in
 [azahar-emu/azahar#2557](https://github.com/azahar-emu/azahar/pull/2557) so it can be fixed
 properly upstream.
 
-### 2. Big-core scheduling
+### 2. Emulation thread priority
 
-The T618 is big.LITTLE. The emulation thread (CPU JIT) and the Vulkan worker thread are now pinned
-to the highest-capacity cores (the two Cortex-A75s) and given Android's urgent-display priority,
-instead of being left for the scheduler to park on a Cortex-A55.
+The emulation thread and the Vulkan worker thread run at Android's urgent-display priority so
+background apps cannot push them out of the run queue. An earlier version also pinned these
+threads to the two Cortex-A75 cores; that was removed because every thread they create (the
+emulated CPU cores, the Vulkan present threads and the Mali driver's own workers) inherits the
+pin, crowding the whole emulator onto two cores.
 
 ### 3. Defaults that fit the device
 
