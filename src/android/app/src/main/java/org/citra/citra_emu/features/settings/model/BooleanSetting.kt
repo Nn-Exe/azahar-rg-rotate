@@ -13,7 +13,7 @@ enum class BooleanSetting(
 ) : AbstractBooleanSetting {
     EXPAND_TO_CUTOUT_AREA(SettingKeys.expand_to_cutout_area(), Settings.SECTION_LAYOUT, false),
     SPIRV_SHADER_GEN(SettingKeys.spirv_shader_gen(), Settings.SECTION_RENDERER, true),
-    ASYNC_SHADERS(SettingKeys.async_shader_compilation(), Settings.SECTION_RENDERER, false),
+    ASYNC_SHADERS(SettingKeys.async_shader_compilation(), Settings.SECTION_RENDERER, true),
     DISABLE_SPIRV_OPTIMIZER(SettingKeys.disable_spirv_optimizer(), Settings.SECTION_RENDERER, true),
     PLUGIN_LOADER(SettingKeys.plugin_loader(), Settings.SECTION_SYSTEM, false),
     ALLOW_PLUGIN_LOADER(SettingKeys.allow_plugin_loader(), Settings.SECTION_SYSTEM, true),
@@ -26,7 +26,7 @@ enum class BooleanSetting(
         false
     ),
     SWAP_EYES_3D(SettingKeys.swap_eyes_3d(), Settings.SECTION_RENDERER, false),
-    PERF_OVERLAY_ENABLE(SettingKeys.performance_overlay_enable(), Settings.SECTION_LAYOUT, false),
+    PERF_OVERLAY_ENABLE(SettingKeys.performance_overlay_enable(), Settings.SECTION_LAYOUT, true),
     PERF_OVERLAY_SHOW_FPS(
         SettingKeys.performance_overlay_show_fps(),
         Settings.SECTION_LAYOUT,
@@ -40,7 +40,7 @@ enum class BooleanSetting(
     PERF_OVERLAY_SHOW_SPEED(
         SettingKeys.performance_overlay_show_speed(),
         Settings.SECTION_LAYOUT,
-        false
+        true
     ),
     PERF_OVERLAY_SHOW_APP_RAM_USAGE(
         SettingKeys.performance_overlay_show_app_ram_usage(),
@@ -130,7 +130,7 @@ enum class BooleanSetting(
         Settings.SECTION_RENDERER,
         false
     ),
-    CHECK_FOR_UPDATES(SettingKeys.check_for_update_on_start(), Settings.SECTION_MISC, true);
+    CHECK_FOR_UPDATES(SettingKeys.check_for_update_on_start(), Settings.SECTION_MISC, false);
 
     override var boolean: Boolean = defaultValue
 

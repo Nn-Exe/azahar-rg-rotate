@@ -2,7 +2,10 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <algorithm>
+#include <fstream>
 #include <string>
+#include <vector>
 
 #include "common/error.h"
 #include "common/logging/log.h"
@@ -22,6 +25,10 @@
 #endif
 #ifndef _WIN32
 #include <unistd.h>
+#endif
+#ifdef __linux__
+#include <sys/resource.h>
+#include <sys/syscall.h>
 #endif
 
 #ifdef __FreeBSD__
@@ -117,6 +124,96 @@ void SetCurrentThreadName(const char*) {
     // Do Nothing on MingW
 }
 #endif
+
+#endif
+
+#ifdef __linux__
+
+namespace {
+
+// Reads a single integer from a sysfs node, returning -1 if it is missing or unreadable.
+long ReadSysfsLong(const std::string& path) {
+    std::ifstream file(path);
+    long value = -1;
+    if (!file || !(file >> value)) {
+        return -1;
+    }
+    return value;
+}
+
+// Returns one "capacity" figure per CPU. Prefers the kernel's normalized cpu_capacity, falls back
+// to the maximum cpufreq frequency, and returns an empty vector if neither is available.
+std::vector<long> GetCpuCapacities() {
+    const long count = sysconf(_SC_NPROCESSORS_CONF);
+    if (count <= 1) {
+        return {};
+    }
+    std::vector<long> capacities(static_cast<std::size_t>(count), -1);
+    bool any = false;
+    for (long cpu = 0; cpu < count; ++cpu) {
+        capacities[cpu] =
+            ReadSysfsLong("/sys/devices/system/cpu/cpu" + std::to_string(cpu) + "/cpu_capacity");
+        any |= capacities[cpu] > 0;
+    }
+    if (!any) {
+        for (long cpu = 0; cpu < count; ++cpu) {
+            capacities[cpu] = ReadSysfsLong("/sys/devices/system/cpu/cpu" + std::to_string(cpu) +
+                                            "/cpufreq/cpuinfo_max_freq");
+            any |= capacities[cpu] > 0;
+        }
+    }
+    return any ? capacities : std::vector<long>{};
+}
+
+} // Anonymous namespace
+
+int PinCurrentThreadToPerformanceCores() {
+    const auto capacities = GetCpuCapacities();
+    if (capacities.empty()) {
+        return 0;
+    }
+    const long max_capacity = *std::max_element(capacities.begin(), capacities.end());
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    int selected = 0;
+    for (std::size_t cpu = 0; cpu < capacities.size(); ++cpu) {
+        if (capacities[cpu] == max_capacity) {
+            CPU_SET(cpu, &set);
+            ++selected;
+        }
+    }
+    // Homogeneous CPU (or every core is "big"): leave the scheduler alone.
+    if (selected == 0 || static_cast<std::size_t>(selected) == capacities.size()) {
+        return 0;
+    }
+    if (sched_setaffinity(0, sizeof(set), &set) != 0) {
+        LOG_WARNING(Common, "sched_setaffinity failed: {}", Common::GetLastErrorMsg());
+        return 0;
+    }
+    return selected;
+}
+
+bool RaiseCurrentThreadPriority() {
+    // -8 matches Android's THREAD_PRIORITY_URGENT_DISPLAY, which app processes are allowed to
+    // set for their own threads.
+    constexpr int target_nice = -8;
+    const auto tid = static_cast<id_t>(syscall(SYS_gettid));
+    if (setpriority(PRIO_PROCESS, tid, target_nice) != 0) {
+        LOG_WARNING(Common, "setpriority failed: {}", Common::GetLastErrorMsg());
+        return false;
+    }
+    return true;
+}
+
+#else
+
+int PinCurrentThreadToPerformanceCores() {
+    return 0;
+}
+
+bool RaiseCurrentThreadPriority() {
+    return false;
+}
 
 #endif
 

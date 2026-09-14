@@ -93,12 +93,12 @@ static const char* android_config_default_file_content = (BOOST_HANA_STRING(R"(
 )") DECLARE_KEY(cpu_clock_percentage) BOOST_HANA_STRING(R"(
 
 [Renderer]
-# Whether to render using OpenGL
+# Which graphics API to render with
 # 1: OpenGL ES, 2: Vulkan (default)
 )") DECLARE_KEY(graphics_api) BOOST_HANA_STRING(R"(
 
 # Whether to compile shaders on multiple worker threads (Vulkan only)
-# 0: Off, 1: On (default)
+# 0: Off, 1: On (default on the RG Rotate build)
 )") DECLARE_KEY(async_shader_compilation) BOOST_HANA_STRING(R"(
 
 # Whether to emit PICA fragment shader using SPIRV or GLSL (Vulkan only)
@@ -230,9 +230,9 @@ static const char* android_config_default_file_content = (BOOST_HANA_STRING(R"(
 
 [Layout]
 # Layout for the screen inside the render window, landscape mode
-# 0: Original (screens vertically aligned)
+# 0: Original (screens vertically aligned, default on the RG Rotate build)
 # 1: Single Screen Only,
-# 2: Large Screen (Default on android)
+# 2: Large Screen
 # 3: Side by Side
 # 4: Hybrid
 # 5: Custom Layout
@@ -335,8 +335,9 @@ static const char* android_config_default_file_content = (BOOST_HANA_STRING(R"(
 )") DECLARE_KEY(screen_orientation) BOOST_HANA_STRING(R"(
 
 # Layout for the portrait mode
-# 0 (default): Top and bottom screens at top, full width
+# 0: Top and bottom screens at top, full width
 # 1: Custom Layout
+# 2 (default on the RG Rotate build): Original, both screens stacked at native aspect ratio
 )") DECLARE_KEY(portrait_layout_option) BOOST_HANA_STRING(R"(
 
 # Screen placement when using Portrait Custom layout option

@@ -112,4 +112,18 @@ void SetCurrentThreadPriority(ThreadPriority new_priority);
 
 void SetCurrentThreadName(const char* name);
 
+/**
+ * Pins the calling thread to the CPU cores with the highest capacity (the "big" cluster on
+ * big.LITTLE SoCs). No-op on homogeneous CPUs and on platforms without affinity support.
+ * @return number of cores in the resulting affinity mask, or 0 if nothing was changed.
+ */
+int PinCurrentThreadToPerformanceCores();
+
+/**
+ * Raises the calling thread's scheduling priority (lowers its nice value) where the platform
+ * allows an unprivileged process to do so, e.g. Android.
+ * @return true if the priority was raised.
+ */
+bool RaiseCurrentThreadPriority();
+
 } // namespace Common

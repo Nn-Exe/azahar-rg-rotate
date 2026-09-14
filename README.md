@@ -1,141 +1,106 @@
-![Azahar Emulator](https://azahar-emu.org/resources/images/logo/azahar-name-and-logo.svg)
+# Azahar RG Rotate
 
-![Current Release](https://img.shields.io/github/v/release/azahar-emu/azahar?label=Current%20Release)
-![Current Prerelease](https://img.shields.io/github/v/release/azahar-emu/azahar?include_prereleases&label=Current%20Prerelease)
+**An unofficial build of the [Azahar](https://github.com/azahar-emu/azahar) Nintendo 3DS emulator, tuned exclusively for the Anbernic RG Rotate.**
 
-![GitHub Downloads](https://img.shields.io/github/downloads/azahar-emu/azahar/total?logo=github&label=GitHub%20Downloads)
-![Google Play Downloads](https://playbadges.pavi2410.com/badge/downloads?id=io.github.lime3ds.android&pretty&label=Play%20Store%20Downloads)
-![Flathub Downloads](https://img.shields.io/flathub/downloads/org.azahar_emu.Azahar?logo=flathub&label=Flathub%20Downloads)
-![CI Build Status](https://github.com/azahar-emu/azahar/actions/workflows/build.yml/badge.svg)
+> This is not an official Azahar release and is not affiliated with or endorsed by the Azahar team.
+> All of the emulator is their work. This repository only carries a small set of device-specific
+> changes on top of it. If you are not using an RG Rotate, use the official builds from
+> [azahar-emu.org](https://azahar-emu.org) instead. Bugs in this build should be reported here,
+> not to the Azahar team.
 
-**Azahar** is a free and open-source high level Nintendo 3DS emulator for PC and mobile devices. Our goal is to give 3DS owners a place to enjoy their library of titles with improvements to the original hardware, such as higher resolutions, modern controllers or save states. The emulator also serves as a debugging hub for homebrew developers and as a research and preservation platform for the 3DS ecosystem.
+## Credit
 
-The project continues the legacy of **Citra** and is actively developed by a community of contributors.
+Azahar is developed by the [Azahar Emulator Project](https://github.com/azahar-emu/azahar) and its
+contributors, continuing the legacy of Citra. Everything that makes this emulator work, from the
+CPU JIT to the Vulkan renderer to the Android app, is theirs. Please support the upstream project.
+The original upstream README is kept as [README.upstream.md](README.upstream.md).
 
-*Azahar is not affiliated with or endorsed by Nintendo.*
+This build is licensed under the same terms as Azahar: GPLv2 or any later version. See
+[license.txt](license.txt).
 
-# Installation
+## Why this exists
 
-### Windows
+The RG Rotate is a weak, low-memory handheld:
 
-Azahar is available as both an installer and a zip archive.
+| Part | Value |
+| --- | --- |
+| SoC | Unisoc Tiger T618 (2x Cortex-A75 @ 2.0 GHz + 6x Cortex-A55) |
+| GPU | ARM Mali-G52 MP2 @ 850 MHz |
+| RAM | 3 GB |
+| Screen | 3.5" 720x720 square IPS |
+| OS | Android 12 |
 
-Download the latest release in your preferred format from the [Releases](https://github.com/azahar-emu/azahar/releases) page.
+The official Android build assumes more RAM and a phone-shaped screen. On this device, save
+states crashed the emulator every time, and nothing kept the heavy emulation threads on the two
+fast cores. This build fixes those and sets defaults that fit the hardware. Nothing here is a
+general improvement to Azahar; it is specific to this device.
 
-If you are unsure of whether you want to use MSVC or MSYS2, use MSYS2.
+## Download and install
 
----
+Grab the latest `azahar-rgrotate-release.apk` from the
+[Releases](../../releases) page and sideload it. It installs as a separate app named
+**"Azahar RG Rotate"** (package `org.azahar_emu.azahar.rgrotate`), so it can live next to the
+official app without conflicts. On first launch, pick your Azahar user folder again. Save states
+from other builds cannot be loaded (Azahar locks states to the build that created them).
 
-### MacOS
+## What is changed
 
-To download a build that will work on all Macs, you can download the `macos-universal` build on the [Releases](https://github.com/azahar-emu/azahar/releases) page.
+Full technical details are in [RG_ROTATE.md](RG_ROTATE.md). In short:
 
-Alternatively, if you wish to download a build specifically for your Mac, you can choose either:
+### 1. Save states no longer crash (the actual bug fix)
 
-- `macos-arm64` for Apple Silicon Macs
-- `macos-x86_64` for Intel Macs
+Upstream `SaveState` serialized the whole emulated state into memory, copied it, then allocated a
+third worst-case buffer before compressing. With New 3DS mode that is roughly 800 MB of temporary
+allocations, and on a 3 GB device Android's low-memory killer terminates the process mid-save,
+which looks like an instant crash with no log. Loading had the same problem in reverse.
 
----
+Save states are now streamed through zstd directly to and from disk with a custom stream buffer
+(`src/common/zstd_stream.*`, `src/core/savestate.cpp`). Peak extra memory drops from ~800 MB to
+under 1 MB. The file format is unchanged. Verified on the device: quick save and load work on
+titles that crashed 100% of the time before.
 
-### Android
+The root-cause analysis was shared with the Azahar team in
+[azahar-emu/azahar#2557](https://github.com/azahar-emu/azahar/pull/2557) so it can be fixed
+properly upstream.
 
-There are two variants of Azahar available on Android, those being the Vanilla and Google Play builds.
+### 2. Big-core scheduling
 
-The Vanilla build is technically superior, as it uses an alternative method of file management which is faster, but isn't permitted on the Google Play store.
+The T618 is big.LITTLE. The emulation thread (CPU JIT) and the Vulkan worker thread are now pinned
+to the highest-capacity cores (the two Cortex-A75s) and given Android's urgent-display priority,
+instead of being left for the scheduler to park on a Cortex-A55.
 
-For most users, we currently recommended downloading Azahar on Android via the Google Play Store for ease of accessibility:
+### 3. Defaults that fit the device
 
-<a href='https://play.google.com/store/apps/details?id=io.github.lime3ds.android'><img width='180' alt='Get it on Google Play' src='https://raw.githubusercontent.com/pioug/google-play-badges/06ccd9252af1501613da2ca28eaffe31307a4e6d/svg/English.svg'/></a>
+| Setting | Official default | This build | Why |
+| --- | --- | --- | --- |
+| Landscape layout | Large Screen | Original (stacked) | Stacked screens at 1.5x fill the 720x720 panel exactly. |
+| Portrait layout | Top full width | Original (stacked) | Android reports the square panel as portrait; this gives the largest top screen. |
+| Async shader compilation | Off | On | Shader compiles stall for seconds on this CPU. |
+| Performance overlay | Off | On (FPS + speed) | So you can see how a game is doing. Toggle in Settings > Layout. |
+| Check for updates | On | Off | The updater would replace this build with an official one. |
 
-Alternatively, you can install the app using Obtainium, allowing you to use the Vanilla variant:
-1. Download and install Obtainium from [here](https://github.com/ImranR98/Obtainium/releases) (use the file named `app-release.apk`)
-2. Open Obtainium and click 'Add App'
-3. Type `https://github.com/azahar-emu/azahar` into the 'App Source URL' section
-4. Click 'Add'
-5. Click 'Install', and select the preferred variant
+Vulkan stays the default renderer, as upstream.
 
-If you wish, you can also simply install the latest APK from the [Releases](https://github.com/azahar-emu/azahar/releases) page.
+### 4. Build changes
 
-Keep in mind that you will not recieve automatic updates when installing via the APK.
+- Separate `rgRotate` product flavor with its own package id and app name.
+- `arm64-v8a` only, link-time optimization, `-march=armv8.2-a+crc -mtune=cortex-a75`.
+- Vulkan validation layers not packaged (debug-only, saves ~10 MB).
 
----
+## Building
 
-### Linux
-
-The recommended format for using Azahar on Linux is the Flatpak available on Flathub:
-
-<a href='https://flathub.org/apps/org.azahar_emu.Azahar'><img width='180' alt='Download on Flathub' src='https://dl.flathub.org/assets/badges/flathub-badge-en.png'/></a>
-
-Azahar is also available as an AppImage on the [Releases](https://github.com/azahar-emu/azahar/releases) page.
-
-There are two variants of the AppImage available, those being `azahar.AppImage` and `azahar-wayland.AppImage`.
-
-If you are unsure of which variant to use, we recommend using the default `azahar.AppImage`. This is because of upstream issues in the Wayland ecosystem which may cause problems when running the emulator (e.g. [#1162](https://github.com/azahar-emu/azahar/issues/1162)).
-
-Unless you explicitly require native Wayland support (e.g. you are running a system with no Xwayland), the non-Wayland variant is recommended.
-
-The Flatpak build of Azahar also has native Wayland support disabled by default. If you require native Wayland support, it can be enabled using [Flatseal](https://flathub.org/en/apps/com.github.tchx84.Flatseal).
-
-# Build instructions
-
-Please refer this repository's [wiki](https://github.com/azahar-emu/azahar/wiki/Building-From-Source) for build instructions
-
-# How can I contribute?
-
-### Pull requests
-
-If you want to implement a change and have the technical capability to do so, we would be happy to accept your contributions.
-
-If you are contributing a new feature, it is highly suggested that you first make a Feature Request issue to discuss the addition before writing any code. This is to ensure that your time isn't wasted working on a feature which isn't deemed appropriate for the project.
-
-After creating a pull request, please don't repeatedly merge `master` into your branch. A maintainer will update the branch for you if/ when it is appropriate to do so.
-
-### Language translations
-
-Additionally, we are accepting language translations on [Transifex](https://app.transifex.com/azahar/azahar). If you know a non-english language listed on our Transifex page, please feel free to contribute.
-
-> [!NOTE]
-> We are not currently accepting new languages for translation. Please do not request for new languages or language variants to be added.
-
-### Compatibility reports
-
-Even if you don't wish to contribute code or translations, you can help the project by reporting game compatibility data to our compatibility list.
-
-To do so, simply read https://github.com/azahar-emu/compatibility-list/blob/master/CONTRIBUTING.md and follow the instructions.
-
-Contributing compatibility data helps more accurately reflect the current capabilities of the emulator, so it would be highly appreciated if you could go through the reporting process after completing a game.
-
-# Minimum requirements
-
-Below are the minimum requirements to run Azahar:
-
-### Desktop
-
-```
-Operating System: Windows 10 (64-bit), MacOS 13.4 (Ventura), or modern 64-bit Linux
-CPU: x86-64/ARM64 CPU (Windows for ARM not supported).
-     Single core performance higher than 1,800 on Passmark.
-     SSE4.2 required on x86_64.
-GPU: OpenGL 4.3 or Vulkan 1.1 support
-Memory: 2GB of RAM. 4GB is recommended
-```
-### Android
-
-```
-Operating System: Android 10.0+ (64-bit)
-CPU: Snapdragon 835 SoC or better
-GPU: OpenGL ES 3.2 or Vulkan 1.1 support
-Memory: 2GB of RAM. 4GB is recommended
+```sh
+git clone --recursive https://github.com/Nn-Exe/azahar-rg-rotate.git
+cd azahar-rg-rotate/src/android
+./gradlew assembleRgRotateRelease
 ```
 
-# What's next?
+Requires JDK 17, Android SDK with `cmake;3.31.6` and `ndk;27.3.13750724`. Output:
+`app/build/outputs/apk/rgRotate/release/app-rgRotate-release.apk`.
 
-We share public roadmaps for upcoming releases in the form of GitHub milestones.
+## Disclosure
 
-You can find these at https://github.com/azahar-emu/azahar/milestones.
-
-# Join the conversation
-
-We have a community Discord server where you can chat about the project, keep up to date with the latest announcements, or coordinate emulator development.
-
-Join at https://discord.gg/4ZjMpAp3M6
+The changes in this repository were developed with the assistance of an AI coding tool (Claude
+Code) and verified by a human on the actual device. Because of the upstream project's
+[AI policy](AI-POLICY.md), this code is not being submitted to Azahar as a contribution; only the
+root-cause analysis was shared with them.

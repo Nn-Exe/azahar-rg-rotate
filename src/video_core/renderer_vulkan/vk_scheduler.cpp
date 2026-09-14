@@ -116,6 +116,12 @@ void Scheduler::DispatchWork() {
 
 void Scheduler::WorkerThread(std::stop_token stop_token) {
     Common::SetCurrentThreadName("VulkanWorker");
+#ifdef ANDROID
+    // RG Rotate build: command recording and submission compete with the emulation thread for
+    // the two big cores; make sure this thread is eligible for them and not stuck on a little core.
+    Common::PinCurrentThreadToPerformanceCores();
+    Common::RaiseCurrentThreadPriority();
+#endif
 
     const auto TryPopQueue{[this](auto& work) -> bool {
         if (work_queue.empty()) {

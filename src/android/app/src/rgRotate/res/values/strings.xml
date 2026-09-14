@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- RG Rotate build: distinct launcher label so it is identifiable next to the official app. -->
+    <string name="app_name" translatable="false">Azahar RG Rotate</string>
+</resources>

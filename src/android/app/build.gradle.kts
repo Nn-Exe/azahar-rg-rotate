@@ -3,12 +3,10 @@
 // Refer to the license.txt file included.
 
 import android.databinding.tool.ext.capitalizeUS
-import de.undercouch.gradle.tasks.download.Download
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("de.undercouch.download") version "5.5.0"
     id("kotlin-parcelize")
     kotlin("plugin.serialization") version "2.0.20"
     id("androidx.navigation.safeargs.kotlin")
@@ -21,7 +19,8 @@ plugins {
  * next 680 years.
  */
 val autoVersion = (((System.currentTimeMillis() / 1000) - 1451606400) / 10).toInt()
-val abiFilter = listOf("arm64-v8a", "x86_64")
+// RG Rotate build: the Unisoc T618 is arm64 only, so skip the x86_64 slice entirely.
+val abiFilter = listOf("arm64-v8a")
 
 val downloadedJniLibsPath = "${layout.buildDirectory.get().asFile.path}/downloadedJniLibs"
 
@@ -82,7 +81,13 @@ android {
                     "-DANDROID_ARM_NEON=true", // cryptopp requires Neon to work
                     "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON", // Support Android 15 16KiB page
                     // sizes
-                    "-DENABLE_GDBSTUB=OFF" // Disable GDB stub
+                    "-DENABLE_GDBSTUB=OFF", // Disable GDB stub
+                    "-DENABLE_LTO=ON",
+                    // RG Rotate build: Unisoc T618 = 2x Cortex-A75 + 6x Cortex-A55 (ARMv8.2-A).
+                    // Targeting that baseline lets the compiler emit LSE atomics and CRC
+                    // instructions and schedule for the A75 big cores.
+                    "-DCMAKE_C_FLAGS=-march=armv8.2-a+crc -mtune=cortex-a75",
+                    "-DCMAKE_CXX_FLAGS=-march=armv8.2-a+crc -mtune=cortex-a75"
                 )
             }
         }
@@ -177,6 +182,13 @@ android {
             dimension = "version"
             versionNameSuffix = "-vanilla"
         }
+        // RG Rotate build: separate package so it installs next to (and never signature-conflicts
+        // with) the official Azahar APK.
+        register("rgRotate") {
+            dimension = "version"
+            versionNameSuffix = "-rgrotate"
+            applicationId = "org.azahar_emu.azahar.rgrotate"
+        }
         register("googlePlay") {
             dimension = "version"
             versionNameSuffix = "-googleplay"
@@ -220,32 +232,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.2")
 }
 
-// Download Vulkan Validation Layers from the KhronosGroup GitHub.
-val downloadVulkanValidationLayers = tasks.register<Download>("downloadVulkanValidationLayers") {
-    src(
-        "https://github.com/KhronosGroup/Vulkan-ValidationLayers/releases/download/vulkan-sdk-1.4.313.0/android-binaries-1.4.313.0.zip"
-    )
-    dest(file("${layout.buildDirectory.get().asFile.path}/tmp/Vulkan-ValidationLayers.zip"))
-    onlyIfModified(true)
-}
-
-// Extract Vulkan Validation Layers into the downloaded native libraries directory.
-val unzipVulkanValidationLayers = tasks.register<Copy>("unzipVulkanValidationLayers") {
-    dependsOn(downloadVulkanValidationLayers)
-    from(zipTree(downloadVulkanValidationLayers.get().dest)) {
-        // Exclude the top level directory in the zip as it violates the expected jniLibs directory structure.
-        eachFile {
-            relativePath = RelativePath(true, *relativePath.segments.drop(1).toTypedArray())
-        }
-        includeEmptyDirs = false
-    }
-    into(downloadedJniLibsPath)
-}
-
-tasks.named("preBuild") {
-    dependsOn(unzipVulkanValidationLayers)
-}
-
+// RG Rotate build: the Vulkan validation layers (debug-only, ~10 MB per ABI) are not downloaded
+// or packaged. Enable "Debug renderer" only has an effect on builds that ship them.
 ktlint {
     version = "1.8.0"
 }

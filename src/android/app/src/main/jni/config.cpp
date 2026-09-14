@@ -186,10 +186,12 @@ void Config::ReadValues() {
     // Layout
     // Somewhat inelegant solution to ensure layout value is between 0 and 5 on read
     // since older config files may have other values
+    // RG Rotate build: the panel is a 720x720 square, so the stacked "Default" layout (top screen
+    // above the bottom screen, both scaled 1.5x) fills it exactly. Large Screen wastes the panel.
     int layoutInt = (int)android_config->GetInteger(
-        "Layout", "layout_option", static_cast<int>(Settings::LayoutOption::LargeScreen));
+        "Layout", "layout_option", static_cast<int>(Settings::LayoutOption::Default));
     if (layoutInt < 0 || layoutInt > 5) {
-        layoutInt = static_cast<int>(Settings::LayoutOption::LargeScreen);
+        layoutInt = static_cast<int>(Settings::LayoutOption::Default);
     }
     Settings::values.layout_option = static_cast<Settings::LayoutOption>(layoutInt);
     Settings::values.screen_gap =
@@ -214,10 +216,12 @@ void Config::ReadValues() {
     ReadSetting("Layout", Settings::values.cardboard_y_shift);
     ReadSetting("Layout", Settings::values.upright_screen);
 
+    // Android reports a square panel as portrait; "Original" keeps both screens at the native
+    // aspect ratio and gives the largest top screen (600x360 over 480x360 on 720x720).
     Settings::values.portrait_layout_option =
         static_cast<Settings::PortraitLayoutOption>(android_config->GetInteger(
             "Layout", "portrait_layout_option",
-            static_cast<int>(Settings::PortraitLayoutOption::PortraitTopFullWidth)));
+            static_cast<int>(Settings::PortraitLayoutOption::PortraitOriginal)));
     Settings::values.secondary_display_layout = static_cast<Settings::SecondaryDisplayLayout>(
         android_config->GetInteger("Layout", Settings::HKeys::secondary_display_layout.c_str(),
                                    static_cast<int>(Settings::SecondaryDisplayLayout::None)));
