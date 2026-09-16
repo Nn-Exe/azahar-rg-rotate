@@ -68,6 +68,46 @@ The two are at parity within run-to-run noise. This build's value is the save-st
 lower memory footprint and the device defaults, not raw speed. The benchmark tooling is in
 [tools/rgrotate-bench](tools/rgrotate-bench).
 
+### Measured CPU profile (2026-09-16, Pokemon Ultra Sun, Route 1 overworld)
+
+Recorded with `tools/rgrotate-bench/profile.sh` (30 s, 28k samples) while standing in the
+overworld:
+
+| Where | Share of CPU |
+| --- | --- |
+| libcitra-android.so | 23% |
+| Linux kernel | 22% |
+| JIT-generated code (unsymbolized) | 22% |
+| Mali GL driver | 15% |
+| bionic libc | 10% |
+
+Hottest named functions: audio time-stretching (`soundtouch`, 3.3%), JIT block dispatch
+(`AddressSpace::GetOrEmit`, 1.9%), `memcpy` (2.6%), PLT stubs (2.6%), mutex lock/unlock (2.6%),
+`ARM_Dynarmic::SetPageTable` (1.2%), PICA command list processing (~2% across
+`ProcessCmdList`/`WriteInternalReg*`). No single dominant hotspot.
+
+During the game's intro movie the picture is different: YUV-to-RGB conversion
+(`HW::Y2R::PerformConversion`) alone takes 5.8%. That is video playback only and does not occur
+during normal play.
+
+### Changes tested and rejected
+
+Measured with `tools/rgrotate-bench/bench_gp.py`, same save, same overworld scene, frame limiter
+off, mean frame time over a 3,200-frame window:
+
+| Configuration | Frame time | vs baseline |
+| --- | --- | --- |
+| Baseline (New 3DS mode, audio stretching on) | 8.17 ms | — |
+| Audio stretching off | 8.27 ms | 1.1% slower |
+| Old 3DS mode (`is_new_3ds = 0`) | 8.28 ms | 1.3% slower |
+
+Neither helped, so neither was adopted. Audio stretching costs measurable CPU but runs on its own
+thread and is not on the critical path. Emulating 2 cores instead of 4 did not pay off either.
+
+Note the headroom: 8.17 ms per frame is roughly 122 system frames per second, about double what
+the console needs, so this scene runs at full speed with room to spare. Optimization effort should
+target heavy scenes (battle animations, towns), not the overworld.
+
 ### Defaults tuned for the device
 
 | Setting | Upstream Android default | RG Rotate default | Why |
