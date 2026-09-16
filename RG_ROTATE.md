@@ -108,6 +108,22 @@ Note the headroom: 8.17 ms per frame is roughly 122 system frames per second, ab
 the console needs, so this scene runs at full speed with room to spare. Optimization effort should
 target heavy scenes (battle animations, towns), not the overworld.
 
+### Pokemon Omega Ruby opening movie: first-play slowdown is shader compilation
+
+The opening movie is the heaviest reproducible scene found so far (boot, choose a language, no
+further input). Frame times were recorded through the whole movie with the speed limiter on:
+
+| Shader cache | Frames in 60.6 s | Seconds below full speed | Overlay reading, same scene |
+| --- | --- | --- | --- |
+| Cold (first ever play) | 6,867 | 3 (one near-freeze at 18 s) | 12 FPS |
+| Warm (second play) | 7,520 | 0 | 29-30 FPS |
+
+Steady-state the movie runs at full speed with the emulation thread at ~40% of one core. The
+slowdown people notice is the disk shader cache being empty the first time. The release ships
+`rgrotate-shader-cache-vulkan.zip` (Ultra Sun and Omega Ruby caches made on this device;
+`tools/rgrotate-bench/pull_shader_cache.sh` regenerates it) so a fresh install gets the warm
+behaviour for the covered scenes.
+
 ### Defaults tuned for the device
 
 | Setting | Upstream Android default | RG Rotate default | Why |
