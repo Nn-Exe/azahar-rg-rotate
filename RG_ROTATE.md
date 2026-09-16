@@ -111,18 +111,38 @@ target heavy scenes (battle animations, towns), not the overworld.
 ### Pokemon Omega Ruby opening movie: first-play slowdown is shader compilation
 
 The opening movie is the heaviest reproducible scene found so far (boot, choose a language, no
-further input). Frame times were recorded through the whole movie with the speed limiter on:
+further input; the language is never saved, so every relaunch repeats it). On a cold cache it runs
+at about 12 FPS with a near-freeze; on a warm one it holds 29-30 FPS. Steady-state the emulation
+thread sits at ~40% of one core, so this is shader compilation rather than emulation speed.
 
-| Shader cache | Frames in 60.6 s | Seconds below full speed | Overlay reading, same scene |
-| --- | --- | --- | --- |
-| Cold (first ever play) | 6,867 | 3 (one near-freeze at 18 s) | 12 FPS |
-| Warm (second play) | 7,520 | 0 | 29-30 FPS |
+### Shader caches are portable, so a game can be pre-cached without playing it
 
-Steady-state the movie runs at full speed with the emulation thread at ~40% of one core. The
-slowdown people notice is the disk shader cache being empty the first time. The release ships
-`rgrotate-shader-cache-vulkan.zip` (Ultra Sun and Omega Ruby caches made on this device;
-`tools/rgrotate-bench/pull_shader_cache.sh` regenerates it) so a fresh install gets the warm
-behaviour for the covered scenes.
+`shaders/vulkan/` holds two different things. `transferable/*.vkch` describe the shaders and the
+pipeline configurations the game asked for; they contain no driver data and work on any device.
+`pipeline/*.bin` is the GPU driver's own compiled blob (named after the driver version) and is
+only useful on that driver. At boot `ShaderDiskCache::Init` walks the transferable cache and builds
+every entry up front behind the loading progress bar, so anything listed there never compiles
+mid-game.
+
+Measured on the device with the Omega Ruby opening movie (60 s, limiter on):
+
+| Cache present | Frames | Seconds below full speed |
+| --- | --- | --- |
+| Nothing | 6,867 | 3, including a near-freeze at 0:18 |
+| `transferable/` only, driver blob deleted | 9,699 | 1, at startup only |
+| Both | 7,520 | 0 |
+
+The portable half alone removes the stutter, so a cache produced by anyone who has played a game
+can be dropped into a fresh install. The release ships `rgrotate-shader-cache-vulkan.zip`;
+`tools/rgrotate-bench/pull_shader_cache.sh` regenerates it from a device.
+
+### Why stutter happens at all with async shader compilation enabled
+
+`vk_rasterizer.cpp` picks `wait_built = !async_shaders || regs.pipeline.num_vertices <= 6`, so any
+draw of six or fewer vertices blocks until its shader is ready even when async compilation is on.
+Full-screen quads in cutscenes and fades are exactly those draws, which is why intros stall on a
+cold cache while ordinary gameplay does not. Raising that threshold would trade a missing effect
+for a few frames against the stall; not attempted here.
 
 ### Defaults tuned for the device
 
