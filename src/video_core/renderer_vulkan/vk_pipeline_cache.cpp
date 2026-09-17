@@ -84,7 +84,14 @@ PipelineCache::PipelineCache(const Instance& instance_, Scheduler& scheduler_,
                              RenderManager& renderpass_cache_, DescriptorUpdateQueue& update_queue_)
     : instance{instance_}, scheduler{scheduler_}, renderpass_cache{renderpass_cache_},
       update_queue{update_queue_},
+#ifdef ANDROID
+      // RG Rotate build: the T618 has 8 cores but only 2 fast ones, and the emulation and Vulkan
+      // threads do not need more than those. Compiling shaders on more of the little cores
+      // shortens the queue that makes cold-cache cutscenes stall.
+      num_worker_threads{std::max(std::thread::hardware_concurrency(), 4U) * 3 / 4},
+#else
       num_worker_threads{std::max(std::thread::hardware_concurrency(), 2U) / 2},
+#endif
       pipeline_workers{num_worker_threads, "Pipeline workers"},
       shader_workers{num_worker_threads, "Shader workers"},
       descriptor_heaps{
@@ -363,7 +370,7 @@ void PipelineCache::SwitchDiskCache(u64 title_id, const std::atomic_bool& stop_l
     }
 }
 
-bool PipelineCache::BindPipeline(PipelineInfo& info, bool wait_built) {
+bool PipelineCache::BindPipeline(PipelineInfo& info, bool wait_built, bool is_small_draw) {
     MICROPROFILE_SCOPE(Vulkan_Bind);
 
     for (u32 i = 0; i < MAX_SHADER_STAGES; i++) {
@@ -371,7 +378,14 @@ bool PipelineCache::BindPipeline(PipelineInfo& info, bool wait_built) {
     }
 
     GraphicsPipeline* const pipeline = curr_disk_cache->GetPipeline(info);
-    if (!pipeline->IsDone() && !pipeline->TryBuild(wait_built)) {
+    // A small draw would normally block until its shader is ready, which is what stalls cutscenes
+    // on a cold shader cache. Give it a bounded number of frames to compile in the background
+    // first; only once that budget is spent do we block, so the effect cannot stay missing.
+    bool wait = wait_built;
+    if (wait && is_small_draw && !pipeline->IsDone() && pipeline->ConsumeSkipBudget()) {
+        wait = false;
+    }
+    if (!pipeline->IsDone() && !pipeline->TryBuild(wait)) {
         return false;
     }
 

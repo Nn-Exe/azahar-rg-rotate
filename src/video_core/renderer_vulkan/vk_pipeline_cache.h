@@ -67,7 +67,7 @@ public:
                      const VideoCore::DiskResourceLoadCallback& callback = {});
 
     /// Binds a pipeline using the provided information
-    bool BindPipeline(PipelineInfo& info, bool wait_built = false);
+    bool BindPipeline(PipelineInfo& info, bool wait_built = false, bool is_small_draw = false);
 
     Pica::Shader::Generator::ExtraVSConfig CalcExtraConfig(
         const Pica::Shader::Generator::PicaVSConfig& config);

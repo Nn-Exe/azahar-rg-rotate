@@ -144,6 +144,34 @@ Full-screen quads in cutscenes and fades are exactly those draws, which is why i
 cold cache while ordinary gameplay does not. Raising that threshold would trade a missing effect
 for a few frames against the stall; not attempted here.
 
+### Reducing first-play stutter (`vk_pipeline_cache.cpp`, `vk_graphics_pipeline.h`, `vk_rasterizer.cpp`)
+
+Upstream forces a blocking wait for any draw of six vertices or fewer even when async shader
+compilation is on, because those draws are usually full-screen quads whose absence would be
+visible. On a cold shader cache that is what makes cutscenes stall.
+
+Two changes:
+
+- **Bounded skipping.** Each pipeline may now be skipped for up to 30 frames while it compiles in
+  the background, and only then does the renderer block. The effect can never stay missing for
+  long, but the compiler gets a head start. (`GraphicsPipeline::ConsumeSkipBudget`.)
+- **More compile workers on Android.** The worker pools sized themselves at half the core count
+  (4 of 8 here). The T618 has only two fast cores, which the emulation and Vulkan threads already
+  occupy, so shader compilation now uses three quarters of the cores and finishes sooner.
+
+Measured on the Omega Ruby opening movie with the speed limiter on, shader cache deleted first:
+
+| Build | Stalls over 100 ms | Total time stalled | Worst single frame |
+| --- | --- | --- | --- |
+| Upstream behaviour | 16 | 5.46 s | 1176 ms |
+| Bounded skip only (2 runs) | 14 / 12 | 4.52 s / 4.28 s | 784 / 812 ms |
+| Bounded skip + more workers | **10** | **3.69 s** | **828 ms** |
+
+Warm cache is not regressed; it improves slightly (stalls over 100 ms: 10 to 5). No missing
+effects were observed in screenshots taken through the movie. This reduces first-play stutter by
+roughly a third; it does not eliminate it, because the shaders still have to be compiled at some
+point. A pre-warmed cache remains the only way to avoid the cost entirely.
+
 ### Settings tested on the heaviest scene available
 
 Omega Ruby opening movie, frame limiter off to expose headroom, frame times compared at matching

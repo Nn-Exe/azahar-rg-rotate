@@ -320,6 +320,21 @@ public:
 
     bool TryBuild(bool wait_built);
 
+    /**
+     * Small draws (typically full-screen quads used for fades and post effects) must not be
+     * dropped for long, but blocking on their shader compilation is what makes cutscenes stall.
+     * Each pipeline may therefore be skipped a bounded number of times while it compiles in the
+     * background; once the budget is gone the caller falls back to waiting.
+     * @return true while the draw may still be skipped.
+     */
+    bool ConsumeSkipBudget() {
+        if (skip_budget == 0) {
+            return false;
+        }
+        skip_budget--;
+        return true;
+    }
+
     bool Build(bool fail_on_compile_required = false);
 
     [[nodiscard]] vk::Pipeline Handle() const noexcept {
@@ -338,6 +353,9 @@ private:
     PipelineInfo info;
     std::array<Shader*, 3> stages;
     bool is_pending{};
+    /// Frames a not-yet-compiled small draw may be skipped before we block on it.
+    static constexpr u32 SkipBudget = 30;
+    u32 skip_budget{SkipBudget};
 };
 
 } // namespace Vulkan
