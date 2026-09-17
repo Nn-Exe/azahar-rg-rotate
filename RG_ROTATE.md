@@ -144,6 +144,32 @@ Full-screen quads in cutscenes and fades are exactly those draws, which is why i
 cold cache while ordinary gameplay does not. Raising that threshold would trade a missing effect
 for a few frames against the stall; not attempted here.
 
+### Settings tested on the heaviest scene available
+
+Omega Ruby opening movie, frame limiter off to expose headroom, frame times compared at matching
+frame indices (the sequence is deterministic). "100% of full speed" is calibrated from a
+limiter-on run of the same scene, which measures 116 system frames per second. Note a system
+frame here is a screen swap, and the 3DS has two screens, so full speed is about 116/s rather
+than 60/s.
+
+| Setting | Speed | Verdict |
+| --- | --- | --- |
+| Native resolution (default) | 157% | 57% headroom |
+| Resolution 2x | 86% | **too slow, do not use** |
+| Emulated CPU clock 75% | 157% | no effect |
+| Emulated CPU clock 150% | 157% | no effect |
+| Skip duplicate frames | 157% | no effect on speed |
+
+Resolution is the only setting that moved the needle, and only upward in cost. Because the games
+already run at 100% with headroom to spare at native, rendering *below* native would buy speed
+that is not needed; it would only trade sharpness for battery and heat.
+
+Sub-native scaling is also not expressible today: `res_scale` is a `u32` multiplied into every
+surface dimension (`SurfaceParams::GetScaledWidth`), so fractional factors would require reworking
+the rasterizer cache, and non-integer scaling is a classic source of texture alignment bugs.
+Do not set resolution to Auto either: on a 720x720 panel that resolves to roughly 1.8x native,
+which is in the same territory as the 2x result above.
+
 ### Defaults tuned for the device
 
 | Setting | Upstream Android default | RG Rotate default | Why |
